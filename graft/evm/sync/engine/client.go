@@ -445,9 +445,9 @@ func (c *client) newSyncerRegistry(summary message.Syncable) (*SyncerRegistry, e
 			return nil, fmt.Errorf("failed to create firewood syncer: %w", err)
 		}
 	} else {
-		stateSyncer, err = evmstate.NewHashDBSyncer(
-			c.config.SnowCtx.Log, c.config.leafFetcher(), c.config.ChainDB,
-			summary.GetBlockRoot(), codeQueue,
+		stateSyncer, err = evmstate.NewSyncer(
+			c.config.leafFetcher(), c.config.ChainDB, summary.GetBlockRoot(), codeQueue,
+			c.config.RequestSize,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create EVM state syncer: %w", err)

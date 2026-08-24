@@ -15,13 +15,12 @@ import (
 
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/graft/evm/message"
+	"github.com/ava-labs/avalanchego/graft/evm/sync/client"
 	"github.com/ava-labs/avalanchego/graft/evm/sync/leaf"
 	"github.com/ava-labs/avalanchego/graft/evm/sync/types"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
-	"github.com/ava-labs/avalanchego/vms/evm/sync/evmstate"
 
 	atomicstate "github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/atomic/state"
-	syncclient "github.com/ava-labs/avalanchego/graft/evm/sync/client"
 )
 
 const (
@@ -35,7 +34,7 @@ const (
 var (
 	_ types.Syncer    = (*Syncer)(nil)
 	_ types.Finalizer = (*Syncer)(nil)
-	_ leaf.Task       = (*syncerLeafTask)(nil)
+	_ leaf.SyncTask   = (*syncerLeafTask)(nil)
 
 	errTargetHeightRequired = errors.New("target height must be > 0")
 )
@@ -83,7 +82,7 @@ type Syncer struct {
 	targetHeight uint64
 
 	// syncer is used to sync leaves from the network.
-	syncer *leaf.Syncer
+	syncer *leaf.CallbackSyncer
 
 	// lastHeight is the greatest height for which key / values
 	// were last inserted into the [atomicTrie]
@@ -91,7 +90,7 @@ type Syncer struct {
 }
 
 // NewSyncer returns a new syncer instance that will sync the atomic trie from the network.
-func NewSyncer(client types.LeafClient, db *versiondb.Database, atomicTrie *atomicstate.AtomicTrie, targetRoot common.Hash, targetHeight uint64, opts ...SyncerOption) (*Syncer, error) {
+func NewSyncer(cl types.LeafClient, db *versiondb.Database, atomicTrie *atomicstate.AtomicTrie, targetRoot common.Hash, targetHeight uint64, opts ...SyncerOption) (*Syncer, error) {
 	if targetHeight == 0 {
 		return nil, errTargetHeightRequired
 	}
@@ -117,16 +116,20 @@ func NewSyncer(client types.LeafClient, db *versiondb.Database, atomicTrie *atom
 		lastHeight:   lastCommit,
 	}
 
-	// The atomic trie is sequential, so one task covers it.
-	tasks := make(chan leaf.Task, 1)
+	// Create tasks channel with capacity for the number of workers.
+	tasks := make(chan leaf.SyncTask, cfg.numWorkers)
+
+	// For atomic trie syncing, we typically want a single task since the trie is sequential.
+	// But we can create multiple tasks if needed for parallel processing of different ranges.
 	tasks <- &syncerLeafTask{syncer: syncer}
 	close(tasks)
 
-	fetcher := syncclient.NewLeafFetcher(client, message.CorethLeafsRequestType, TrieNode)
-	syncer.syncer = leaf.NewSyncer(fetcher, tasks,
-		leaf.WithNumWorkers(cfg.numWorkers),
-		leaf.WithRequestSize(cfg.requestSize),
-	)
+	syncer.syncer = leaf.NewCallbackSyncer(
+		client.NewLeafFetcher(cl, message.CorethLeafsRequestType, TrieNode),
+		tasks, &leaf.SyncerConfig{
+			RequestSize: cfg.requestSize,
+			NumWorkers:  cfg.numWorkers,
+		})
 
 	return syncer, nil
 }
@@ -245,9 +248,11 @@ type syncerLeafTask struct {
 
 func (a *syncerLeafTask) Start() []byte                  { return addZeroes(a.syncer.lastHeight + 1) }
 func (*syncerLeafTask) End() []byte                      { return nil }
+func (*syncerLeafTask) NodeType() message.NodeType       { return TrieNode }
 func (a *syncerLeafTask) OnFinish(context.Context) error { return a.syncer.onFinish() }
+func (*syncerLeafTask) OnStart() (bool, error)           { return false, nil }
 func (a *syncerLeafTask) Root() common.Hash              { return a.syncer.targetRoot }
 func (*syncerLeafTask) Account() common.Hash             { return common.Hash{} }
-func (a *syncerLeafTask) OnLeaves(ctx context.Context, leaves evmstate.Leaves) error {
-	return a.syncer.onLeafs(ctx, leaves.Keys, leaves.Vals)
+func (a *syncerLeafTask) OnLeafs(ctx context.Context, keys, vals [][]byte) error {
+	return a.syncer.onLeafs(ctx, keys, vals)
 }
