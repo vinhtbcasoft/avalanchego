@@ -181,6 +181,7 @@ func (b *backend) StateAtTransaction(ctx context.Context, ethB *types.Block, txI
 	// Replay transactions 0..txIndex-1 to produce the state just before the
 	// target transaction.
 	result, err := saexec.Execute(
+		ctx,
 		block,
 		b,
 		txIndex,
