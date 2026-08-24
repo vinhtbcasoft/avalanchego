@@ -26,7 +26,8 @@ jobs:
   tests-required:
     if: ${{ always() }}
     needs:
-      - Unit
+      - unit_test
+      - unit_test_smoke
       - Fuzz
       - e2e
       - e2e_schedule_latest
@@ -70,20 +71,27 @@ jobs:
             exit 1
           fi
 
-  Unit:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-26, ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm, ubuntu-24.04-arm]
+  unit_test:
+    name: Unit tests (Ubuntu 24.04 AMD64)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-go-for-project
-      - name: test-unit
+      - name: Run cacheable unit tests
         shell: bash
         run: ./scripts/run_task.sh test-unit
         env:
           TIMEOUT: ${{ env.TIMEOUT }}
+
+  unit_test_smoke:
+    name: Unit-test smoke (macOS 26 ARM64)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-go-for-project
+      - name: Run unit-test smoke check
+        shell: bash
+        run: ./scripts/run_task.sh test-unit-smoke
   Fuzz:
     runs-on: ubuntu-24.04
     steps:

@@ -16,6 +16,7 @@ jobs:
     needs:
       - lint_test
       - unit_test
+      - unit_test_smoke
       - e2e_warp
     runs-on: ubuntu-24.04
     steps:
@@ -54,20 +55,27 @@ jobs:
         run: ./scripts/run_task.sh check-go-mod-tidy
 
   unit_test:
-    name: Unit Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Unit tests (Ubuntu 24.04 AMD64)
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: ./graft/coreth
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-26, ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-go-for-project
-      - run: ./scripts/run_task.sh build-test
+      - run: ./scripts/run_task.sh test-unit
       - run: ./scripts/run_task.sh coverage
+
+  unit_test_smoke:
+    name: Unit-test smoke (macOS 26 ARM64)
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: ./graft/coreth
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-go-for-project
+      - run: ./scripts/run_task.sh test-unit-smoke
 
   e2e_warp:
     name: E2E Warp Tests

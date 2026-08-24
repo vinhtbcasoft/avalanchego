@@ -1,0 +1,44 @@
+name: Scheduled Subnet-EVM
+
+# Separate scheduled workflows run full platform unit tests. This keeps
+# scheduled-only jobs out of pull-request and merge-group workflow runs.
+on:
+  schedule:
+    - cron: '0 13 * * *' # Runs every day at 13:00 UTC
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit_test:
+    name: Unit tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: ./graft/subnet-evm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 22.04 AMD64
+            runner: ubuntu-22.04
+          - name: Ubuntu 22.04 ARM64
+            runner: ubuntu-22.04-arm
+          - name: Ubuntu 24.04 AMD64
+            runner: ubuntu-24.04
+          - name: Ubuntu 24.04 ARM64
+            runner: ubuntu-24.04-arm
+          - name: macOS 26 ARM64
+            runner: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-go-for-project
+      - run: ./scripts/run_task.sh test-unit-race-shuffle
+      - run: ./scripts/run_task.sh coverage

@@ -19,6 +19,7 @@ to workflows and [local composite actions](https://docs.github.com/actions/shari
   - [Use versioned GitHub-hosted runners](#use-versioned-github-hosted-runners)
   - [Pin third-party actions](#pin-third-party-actions)
   - [Pinning does not eliminate supply-chain risk](#pinning-does-not-eliminate-supply-chain-risk)
+- [Test platforms and test configuration](#test-platforms-and-test-configuration)
 - [Validation](#validation)
 
 ## Principles
@@ -225,6 +226,27 @@ When adding or upgrading a third-party action, review its source and its
 dependencies. Prefer actions that pin the third-party actions they invoke. Consider
 the action's permissions and the job's sensitivity when deciding how much review is
 needed.
+
+## Test platforms and test configuration
+
+Pre-merge CI uses fewer unit-test jobs to reduce failures from hosted runners.
+It runs the full cacheable unit suite on Ubuntu 24.04 AMD64.
+It runs one small unit-test smoke check on macOS 26 ARM64.
+The smoke check proves that Go can build and run a test on macOS.
+It does not provide full macOS coverage.
+
+Separate daily workflows run the full unit suite on Ubuntu 22.04 and 24.04,
+on AMD64 and ARM64, and on macOS 26 ARM64.
+Pre-merge unit tests omit race detection and shuffled order so Go can reuse test
+results.
+Daily unit tests use race detection and shuffled order to find concurrency and
+order-dependent failures.
+
+Scheduled workflows stay separate from pull-request and merge-group workflows.
+This prevents scheduled-only jobs from appearing as skipped checks.
+
+When you change a test platform or test configuration, update this policy and
+the related workflow and task entrypoints together.
 
 ## Validation
 
